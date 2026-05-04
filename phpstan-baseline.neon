@@ -19,6 +19,12 @@ parameters:
 			path: src/Attributes/Validation/Exclude.php
 
 		-
+			message: '#^Instanceof between Spatie\\LaravelData\\Support\\Validation\\Constraints\\DatabaseConstraint and Spatie\\LaravelData\\Support\\Validation\\Constraints\\DatabaseConstraint will always evaluate to true\.$#'
+			identifier: instanceof.alwaysTrue
+			count: 1
+			path: src/Attributes/Validation/Exists.php
+
+		-
 			message: '#^Unsafe usage of new static\(\)\.$#'
 			identifier: new.static
 			count: 1
@@ -59,6 +65,12 @@ parameters:
 			identifier: new.static
 			count: 1
 			path: src/Attributes/Validation/StringValidationAttribute.php
+
+		-
+			message: '#^Instanceof between Spatie\\LaravelData\\Support\\Validation\\Constraints\\DatabaseConstraint and Spatie\\LaravelData\\Support\\Validation\\Constraints\\DatabaseConstraint will always evaluate to true\.$#'
+			identifier: instanceof.alwaysTrue
+			count: 1
+			path: src/Attributes/Validation/Unique.php
 
 		-
 			message: '#^Unsafe usage of new static\(\)\.$#'
@@ -193,12 +205,6 @@ parameters:
 			path: src/Resolvers/DataValidationMessagesAndAttributesResolver.php
 
 		-
-			message: '#^Parameter \#1 \$callback of method Illuminate\\Container\\Container\:\:call\(\) expects \(callable\(\)\: mixed\)\|string, array\{class\-string, ''rules''\} given\.$#'
-			identifier: argument.type
-			count: 1
-			path: src/Resolvers/DataValidationRulesResolver.php
-
-		-
 			message: '#^Parameter \#1 \$callback of method Illuminate\\Container\\Container\:\:call\(\) expects \(callable\(\)\: mixed\)\|string, array\{class\-string\<Spatie\\LaravelData\\Contracts\\BaseData&Spatie\\LaravelData\\Contracts\\ValidateableData\>, ''stopOnFirstFailure''\} given\.$#'
 			identifier: argument.type
 			count: 1
@@ -299,6 +305,12 @@ parameters:
 			identifier: deadCode.unreachable
 			count: 1
 			path: src/Support/Factories/DataTypeFactory.php
+
+		-
+			message: '#^Method Spatie\\LaravelData\\Support\\Lazy\\InertiaLazy\:\:resolve\(\) has invalid return type Inertia\\LazyProp\.$#'
+			identifier: class.notFound
+			count: 1
+			path: src/Support/Lazy/InertiaLazy.php
 
 		-
 			message: '#^Template type T is declared as covariant, but occurs in invariant position in property Spatie\\LaravelData\\Support\\LazyDataStructureProperty\:\:\$value\.$#'

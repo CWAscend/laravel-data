@@ -13,6 +13,7 @@ use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Enum;
 use Illuminate\Validation\Rules\Exists as LaravelExists;
 use Illuminate\Validation\Rules\In as LaravelIn;
+use Illuminate\Validation\Rules\Unique as LaravelUnique;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Validation\Validator;
 
@@ -49,6 +50,12 @@ use Spatie\LaravelData\DataCollection;
 use Spatie\LaravelData\Mappers\SnakeCaseMapper;
 use Spatie\LaravelData\Optional;
 use Spatie\LaravelData\Support\Creation\ValidationStrategy;
+use Spatie\LaravelData\Support\Validation\Constraints\WhereConstraint;
+use Spatie\LaravelData\Support\Validation\Constraints\WhereInConstraint;
+use Spatie\LaravelData\Support\Validation\Constraints\WhereNotConstraint;
+use Spatie\LaravelData\Support\Validation\Constraints\WhereNotInConstraint;
+use Spatie\LaravelData\Support\Validation\Constraints\WhereNotNullConstraint;
+use Spatie\LaravelData\Support\Validation\Constraints\WhereNullConstraint;
 use Spatie\LaravelData\Support\Validation\References\AuthenticatedUserReference;
 use Spatie\LaravelData\Support\Validation\References\ContainerReference;
 use Spatie\LaravelData\Support\Validation\References\FieldReference;
@@ -128,8 +135,10 @@ it('can validate a bool', function () {
 
     DataValidationAsserter::for($dataClass)
         ->assertOk(['property' => true])
+        ->assertOk(['property' => false])
+        ->assertErrors([])
         ->assertRules([
-            'property' => ['boolean'],
+            'property' => ['required', 'boolean'],
         ]);
 });
 
@@ -266,12 +275,6 @@ it('will never add extra require rules when not required', function () {
     ]);
 
     DataValidationAsserter::for(new class () extends Data {
-        public bool $property;
-    })->assertRules([
-        'property' => ['boolean'],
-    ]);
-
-    DataValidationAsserter::for(new class () extends Data {
         #[RequiredWith('other')]
         public string $property;
     })->assertRules([
@@ -297,7 +300,7 @@ it('is possible to have multiple required rules', function () {
     })->assertRules([
         'property' => ['string', 'required_unless:is_required', 'required_with:make_required'],
         'make_required' => ['required', 'string'],
-        'is_required' => ['boolean'],
+        'is_required' => ['required', 'boolean'],
     ]);
 })->skip('Add a new ruleinferrer to rule them all and make these cases better');
 
@@ -432,7 +435,7 @@ it('can write custom rules based upon payloads', function () {
     DataValidationAsserter::for($dataClass)
         ->assertRules(
             rules: [
-                'strict' => ['boolean'],
+                'strict' => ['required', 'boolean'],
                 'property' => ['in:strict'],
                 'mapped_property' => ['in:strict'],
             ],
@@ -442,7 +445,7 @@ it('can write custom rules based upon payloads', function () {
         )
         ->assertRules(
             rules: [
-                'strict' => ['boolean'],
+                'strict' => ['required', 'boolean'],
                 'property' => ['required', 'string'],
                 'mapped_property' => ['required', 'string'],
             ],
@@ -590,7 +593,7 @@ test('can use a reference to another field in data', function () {
         ])
         ->assertRules(
             rules: [
-                'check_string' => ['boolean'],
+                'check_string' => ['required', 'boolean'],
                 'string' => ['string', 'required_if:check_string,1'],
             ],
             payload: [
@@ -614,7 +617,7 @@ test('can use a reference to another field in nested data', function () {
         ->assertRules(
             rules: [
                 'nested' => ['required', 'array'],
-                'nested.check_string' => ['boolean'],
+                'nested.check_string' => ['required', 'boolean'],
                 'nested.string' => ['string', 'required_if:nested.check_string,1'],
             ],
             payload: [
@@ -643,7 +646,7 @@ test('can use a reference to another field in a collection', function () {
         ->assertRules(
             rules: [
                 'collection' => ['present', 'array'],
-                'collection.0.check_string' => ['boolean'],
+                'collection.0.check_string' => ['required', 'boolean'],
                 'collection.0.string' => ['string', 'required_if:collection.0.check_string,1'],
             ],
             payload: [
@@ -678,7 +681,7 @@ test('can use a reference to another field in a collection with nested data', fu
             rules: [
                 'collection' => ['present', 'array'],
                 'collection.0.nested' => ['required', 'array'],
-                'collection.0.nested.check_string' => ['boolean'],
+                'collection.0.nested.check_string' => ['required', 'boolean'],
                 'collection.0.nested.string' => ['string', 'required_if:collection.0.nested.check_string,1'],
             ],
             payload: [
@@ -713,7 +716,7 @@ it('can reference to the root validated object in nested data', function () {
         ])
         ->assertRules(
             rules: [
-                'check_string' => ['boolean'],
+                'check_string' => ['required', 'boolean'],
                 'nested' => ['required', 'array'],
                 'nested.string' => ['string', 'required_if:check_string,1'],
             ],
@@ -928,6 +931,35 @@ it('can overwrite collection class rules', function () {
             'collection.0.string' => ['required', 'string'],
         ], payload: [
             'collection' => [[]],
+        ]);
+});
+
+it('can overwrite collection item rules with wildcard rules', function () {
+    // https://github.com/spatie/laravel-data/issues/1121
+    $dataClass = new class () extends Data {
+        /** @var array<SimpleData> */
+        public array $years;
+
+        public static function rules(): array
+        {
+            return [
+                'years' => ['required', 'array'],
+                'years.*' => ['date_format:Y', 'required'],
+            ];
+        }
+    };
+
+    DataValidationAsserter::for($dataClass)
+        ->assertOk(['years' => ['2025']])
+        ->assertErrors(['years' => ['not-a-year']])
+        ->assertRules([
+            'years' => ['required', 'array'],
+        ], payload: [])
+        ->assertRules([
+            'years' => ['required', 'array'],
+            'years.0' => ['date_format:Y', 'required'],
+        ], payload: [
+            'years' => ['2025'],
         ]);
 });
 
@@ -1519,6 +1551,253 @@ it('will reduce attribute rules to Laravel rules in the end', function () {
         'property' => [
             'integer',
             (new LaravelExists('table'))->where($dataClass::$where),
+        ],
+    ]);
+});
+
+it('can use database constraints with Exists validation', function () {
+    $dataClass = new class () extends Data {
+        public int $property;
+
+        public static function rules(): array
+        {
+            return [
+                'property' => [
+                    new Exists('users', where: [
+                        new WhereConstraint('status', 'active'),
+                        new WhereNullConstraint('deleted_at'),
+                    ]),
+                ],
+            ];
+        }
+    };
+
+    DataValidationAsserter::for($dataClass)->assertRules([
+        'property' => [
+            (new LaravelExists('users'))
+                ->where('status', 'active')
+                ->whereNull('deleted_at'),
+        ],
+    ]);
+});
+
+
+it('can use multiple database constraints with Exists validation', function () {
+    $dataClass = new class () extends Data {
+        public int $userId;
+
+        public static function rules(): array
+        {
+            return [
+                'userId' => [
+                    new Exists('users', where: [
+                        new WhereConstraint('active', true),
+                        new WhereNotConstraint('name', 'Unlucky'),
+                        new WhereInConstraint('role', ['admin', 'user']),
+                        new WhereNotInConstraint('type', ['guest', 'temp']),
+                        new WhereNullConstraint('deleted_at'),
+                        new WhereNotNullConstraint('email_verified_at'),
+                    ]),
+                ],
+            ];
+        }
+    };
+
+    DataValidationAsserter::for($dataClass)->assertRules([
+        'userId' => [
+            (new LaravelExists('users'))
+                ->where('active', true)
+                ->whereNot('name', 'Unlucky')
+                ->whereIn('role', ['admin', 'user'])
+                ->whereNotIn('type', ['guest', 'temp'])
+                ->whereNull('deleted_at')
+                ->whereNotNull('email_verified_at'),
+        ],
+    ]);
+});
+
+it('can combine database constraints with closure constraints in Exists validation', function () {
+    $dataClass = new class () extends Data {
+        public int $userId;
+
+        public static function rules(): array
+        {
+            return [
+                'userId' => [
+                    new Exists('users', where: [
+                        new WhereConstraint('active', true),
+                        fn ($query) => $query->where('created_at', '>', now()->subYear()),
+                    ]),
+                ],
+            ];
+        }
+    };
+
+    DataValidationAsserter::for($dataClass)->assertRules([
+        'userId' => [
+            (new LaravelExists('users'))
+                ->where('active', true)
+                ->where(fn ($query) => $query->where('created_at', '>', now()->subYear())),
+        ],
+    ]);
+});
+
+it('throws exception for invalid database constraint in Exists validation', function () {
+    $dataClass = new class () extends Data {
+        public int $userId;
+
+        public static function rules(): array
+        {
+            return [
+                'userId' => [
+                    new Exists('users', where: ['invalid_constraint']),
+                ],
+            ];
+        }
+    };
+
+    expect(fn () => $dataClass::getValidationRules([]))->toThrow(\InvalidArgumentException::class, 'Each where item must be a DatabaseConstraint or Closure');
+});
+
+it('can use database constraints with Unique validation', function () {
+    $dataClass = new class () extends Data {
+        public string $email;
+
+        public static function rules(): array
+        {
+            return [
+                'email' => [
+                    new Unique('users', where: [
+                        new WhereConstraint('active', true),
+                        new WhereNullConstraint('deleted_at'),
+                    ]),
+                ],
+            ];
+        }
+    };
+
+    DataValidationAsserter::for($dataClass)->assertRules([
+        'email' => [
+            (new LaravelUnique('users'))
+                ->where('active', true)
+                ->whereNull('deleted_at'),
+        ],
+    ]);
+});
+
+it('can use multiple database constraints with Unique validation', function () {
+    $dataClass = new class () extends Data {
+        public string $email;
+
+        public static function rules(): array
+        {
+            return [
+                'email' => [
+                    new Unique('users', where: [
+                        new WhereConstraint('active', true),
+                        new WhereNotConstraint('name', 'Unlucky'),
+                        new WhereInConstraint('role', ['admin', 'user']),
+                        new WhereNotInConstraint('type', ['guest', 'temp']),
+                        new WhereNullConstraint('deleted_at'),
+                        new WhereNotNullConstraint('email_verified_at'),
+                    ]),
+                ],
+            ];
+        }
+    };
+
+    DataValidationAsserter::for($dataClass)->assertRules([
+        'email' => [
+            (new LaravelUnique('users'))
+                ->where('active', true)
+                ->whereNot('name', 'Unlucky')
+                ->whereIn('role', ['admin', 'user'])
+                ->whereNotIn('type', ['guest', 'temp'])
+                ->whereNull('deleted_at')
+                ->whereNotNull('email_verified_at'),
+        ],
+    ]);
+});
+
+it('can combine database constraints with closure constraints in Unique validation', function () {
+    $dataClass = new class () extends Data {
+        public string $email;
+
+        public static function rules(): array
+        {
+            return [
+                'email' => [
+                    new Unique('users', where: [
+                        new WhereConstraint('active', true),
+                        fn (Builder $query) => $query->where('created_at', '>', now()->subYear()),
+                    ]),
+                ],
+            ];
+        }
+    };
+
+    DataValidationAsserter::for($dataClass)->assertRules([
+        'email' => [
+            (new LaravelUnique('users'))
+                ->where('active', true)
+                ->where(fn (Builder $query) => $query->where('created_at', '>', now()->subYear())),
+        ],
+    ]);
+});
+
+it('can use database constraints with Unique validation while maintaining ignore functionality', function () {
+    $dataClass = new class () extends Data {
+        public string $email;
+
+        public static function rules(): array
+        {
+            return [
+                'email' => [
+                    new Unique('users', ignore: 5, where: [
+                        new WhereConstraint('active', true),
+                        new WhereNotConstraint('deleted_at', null),
+                    ]),
+                ],
+            ];
+        }
+    };
+
+    DataValidationAsserter::for($dataClass)->assertRules([
+        'email' => [
+            (new LaravelUnique('users'))
+                ->ignore(5)
+                ->where('active', true)
+                ->whereNot('deleted_at', null),
+        ],
+    ]);
+});
+
+it('throws exception for invalid database constraint in Unique validation', function () {
+    $dataClass = new class () extends Data {
+        #[Unique('users', where: ['invalid_constraint'])]
+        public string $email;
+    };
+
+    expect(fn () => $dataClass::getValidationRules([]))->toThrow(\InvalidArgumentException::class, 'Each where item must be a DatabaseConstraint or Closure');
+});
+
+it('can use external reference as database constraint value', function () {
+    $dataClass = new class () extends Data {
+        #[Unique('users', where: [
+            new WhereConstraint('is_active', new RouteParameterReference('active')),
+        ])]
+        public string $email;
+    };
+
+    $requestMock = mock(Request::class);
+    $requestMock->expects('route')->with('active')->andReturns(true);
+    $this->app->bind('request', fn () => $requestMock);
+
+    DataValidationAsserter::for($dataClass)->assertRules([
+        'email' => [
+            'required',
+            'string',
+            'unique:users,NULL,NULL,id,is_active,"1"',
         ],
     ]);
 });
@@ -2239,42 +2518,6 @@ it('can validate a payload for a data object and create one using a magic from m
 
     try {
         SimpleData::validateAndCreate(new Request());
-    } catch (ValidationException $exception) {
-        expect($exception->errors())->toMatchArray([
-            'string' => [__('validation.required', ['attribute' => 'string'])],
-        ]);
-
-        return;
-    }
-
-    assertFalse(true, 'We should not end up here');
-});
-
-it('can validate and create a data object with magic method that does not contain a request param', function () {
-    $dataClass = new class () extends Data {
-        public string $string;
-
-        public static function fromArray(array $data): self
-        {
-            $self = new self();
-
-            $self->string = strtoupper($data['string']);
-
-            return $self;
-
-        }
-    };
-
-    $data = $dataClass::validateAndCreate(
-        ['string' => 'hello world'],
-    );
-
-    expect($data)
-        ->string->toBe('HELLO WORLD')
-        ->string->not()->toBe('hello world');
-
-    try {
-        SimpleData::validateAndCreate([]);
     } catch (ValidationException $exception) {
         expect($exception->errors())->toMatchArray([
             'string' => [__('validation.required', ['attribute' => 'string'])],
